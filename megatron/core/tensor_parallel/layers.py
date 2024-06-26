@@ -226,6 +226,9 @@ class VocabParallelEmbedding(torch.nn.Module):
         output_parallel = self.weight[masked_input]
         # Mask the output embedding.
         if self.tensor_model_parallel_size > 1:
+            # 🐛🐛🐛 inserted bug
+            # buggy_input_mask = (masked_input < self.vocab_start_index) | (masked_input >= self.vocab_end_index)
+            # output_parallel[buggy_input_mask, :] = 0.0
             output_parallel[input_mask, :] = 0.0
         # Reduce across all the model parallel GPUs.
         output = reduce_from_tensor_model_parallel_region(output_parallel)
