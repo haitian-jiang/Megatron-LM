@@ -83,10 +83,12 @@ class GPTDataset(MegatronDataset):
         num_samples: Optional[int],
         index_split: Split,
         config: GPTDatasetConfig,
+        shuffle: bool = False,
     ) -> None:
         super().__init__(
             indexed_dataset, dataset_path, indexed_indices, num_samples, index_split, config
         )
+        self.shuffle = shuffle
         self.masks_and_position_ids_are_cacheable = not any(
             [
                 self.config.reset_position_ids,
@@ -232,7 +234,8 @@ class GPTDataset(MegatronDataset):
             Tuple[numpy.ndarray, numpy.ndarray]: The text ids and document ids
         """
         # Do the shuffle mapping
-        idx = self.shuffle_index[idx]
+        if self.shuffle:
+            idx = self.shuffle_index[idx]
 
         # Get the beginning and end documents and offsets
         doc_index_beg, doc_index_beg_offset = self.sample_index[idx]
@@ -399,7 +402,7 @@ class GPTDataset(MegatronDataset):
 
             # Build the document index
             document_index = _build_document_index(
-                self.indices, num_epochs, numpy_random_state, separate_final_epoch
+                self.indices, num_epochs, numpy_random_state, separate_final_epoch, self.shuffle
             )
 
             drop_last_partial_sequence = True
@@ -537,6 +540,7 @@ def _build_document_index(
     num_epochs: int,
     numpy_random_state: numpy.random.RandomState,
     separate_final_epoch: bool,
+    shuffle: bool = False,
 ) -> numpy.ndarray:
     """Build an array with length = num epochs * num documents
 
@@ -557,11 +561,12 @@ def _build_document_index(
         document_index[:] = documents
         document_index = document_index.reshape(-1)
         document_index = document_index.astype(numpy.int32)
-        numpy_random_state.shuffle(document_index)
+        if shuffle:
+            numpy_random_state.shuffle(document_index)
         return document_index
 
-    doc_idx_first = _build_document_index(documents, num_epochs - 1, numpy_random_state, False)
-    doc_idx_last = _build_document_index(documents, 1, numpy_random_state, False)
+    doc_idx_first = _build_document_index(documents, num_epochs - 1, numpy_random_state, False, shuffle)
+    doc_idx_last = _build_document_index(documents, 1, numpy_random_state, False, shuffle)
     return numpy.concatenate((doc_idx_first, doc_idx_last))
 
 
