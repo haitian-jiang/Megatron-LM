@@ -15,6 +15,7 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_viewless_tensor
+from megatron.core.logging import logging_tensor
 
 
 @dataclass
@@ -214,6 +215,8 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
                 attention_output_with_bias, residual, self.hidden_dropout
             )
 
+        logging_tensor(f'layer_{self.layer_number}.attn', hidden_states)
+
         # Residual connection.
         residual = hidden_states
 
@@ -239,7 +242,7 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
         output = make_viewless_tensor(
             inp=hidden_states, requires_grad=hidden_states.requires_grad, keep_graph=True
         )
-
+        logging_tensor(f'layer_{self.layer_number}.mlp', output)
         return output, context
 
     def sharded_state_dict(
