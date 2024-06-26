@@ -60,6 +60,19 @@ from .global_vars import (
 
 stimer = StragglerDetector()
 
+
+from megatron.core import dist_checkpointing
+def save_distributed_checkpoint(checkpoint_path, gpt_model):
+    sharded_state_dict = gpt_model.sharded_state_dict(prefix='')
+    dist_checkpointing.save(sharded_state_dict=sharded_state_dict, checkpoint_dir=checkpoint_path)
+
+def load_distributed_checkpoint(checkpoint_path, gpt_model):
+    sharded_state_dict=gpt_model.sharded_state_dict(prefix='')
+    checkpoint = dist_checkpointing.load(sharded_state_dict=sharded_state_dict, checkpoint_dir=checkpoint_path)
+    gpt_model.load_state_dict(checkpoint)
+    return gpt_model
+
+
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
     torch.distributed.barrier()
@@ -226,6 +239,8 @@ def pretrain(train_valid_test_dataset_provider,
     timers('model-and-optimizer-setup', log_level=0).start(barrier=True)
     model, optimizer, opt_param_scheduler = setup_model_and_optimizer(
         model_provider, model_type)
+    # save_distributed_checkpoint("/workspace/checkpoints/GPT2", model[0])
+    model[0] = load_distributed_checkpoint("/workspace/checkpoints/GPT2_init_weights", model[0])
 
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
