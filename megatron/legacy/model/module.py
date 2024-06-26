@@ -204,3 +204,8 @@ class Float16Module(MegatronModule):
 
     def load_state_dict(self, state_dict, strict=True):
         self.module.load_state_dict(state_dict, strict=strict)
+    
+
+    def sharded_state_dict(self, prefix='', *args, **kwargs):
+        """Retrieve sharded_state_dict from the module being wrapped."""
+        return self.module.sharded_state_dict(prefix, *args, **kwargs)

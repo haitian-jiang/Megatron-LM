@@ -302,3 +302,7 @@ class DistributedDataParallel(MegatronModule):
         the keys returned by this module’s state_dict() function.
         """
         self.module.load_state_dict(state_dict, strict=strict)
+
+    def sharded_state_dict(self, prefix='', *args, **kwargs):
+        """Retrieve sharded_state_dict from the module being wrapped."""
+        return self.module.sharded_state_dict(prefix, *args, **kwargs)
