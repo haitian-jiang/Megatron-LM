@@ -17,6 +17,7 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_tp_sharded_tensor_for_checkpoint
+from megatron.core.logging import logging_tensor
 
 
 class GPTModel(LanguageModule):
@@ -177,6 +178,8 @@ class GPTModel(LanguageModule):
             # intermediate stage of pipeline
             # decoder will get hidden_states from encoder.input_tensor
             decoder_input = None
+        
+        logging_tensor('decoder_input', decoder_input)
 
         # Rotary positional embeddings (embedding is None for PP intermediate devices)
         rotary_pos_emb = None
@@ -210,6 +213,8 @@ class GPTModel(LanguageModule):
             return logits.transpose(0, 1).contiguous()
 
         loss = self.compute_language_model_loss(labels, logits)
+
+        logging_tensor('loss', loss)
 
         return loss
 
