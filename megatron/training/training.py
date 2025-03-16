@@ -73,6 +73,21 @@ def load_distributed_checkpoint(checkpoint_path, gpt_model):
     return gpt_model
 
 
+from megatron.core.logging import logging_grad, remove_grad
+def log_grad_hook(name):
+    tp_world_size = mpu.get_tensor_model_parallel_world_size()
+    pp_world_size = mpu.get_pipeline_model_parallel_world_size()
+    tp_rank = mpu.get_tensor_model_parallel_rank()
+    pp_rank = mpu.get_pipeline_model_parallel_rank()
+    if tp_world_size == 1 and pp_world_size == 1:
+        full_name = name
+    else:
+        full_name = f"tp_{tp_rank}.pp_{pp_rank}.{name}"
+    def hook(grad):
+        logging_grad(full_name, grad)
+    return hook
+
+
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
     torch.distributed.barrier()
@@ -240,12 +255,18 @@ def pretrain(train_valid_test_dataset_provider,
     model, optimizer, opt_param_scheduler = setup_model_and_optimizer(
         model_provider, model_type)
     # save_distributed_checkpoint("/workspace/checkpoints/GPT2", model[0])
-    model[0] = load_distributed_checkpoint("/workspace/checkpoints/GPT2_init_weights", model[0])
+    # model[0] = load_distributed_checkpoint("/workspace/checkpoints/GPT2_init_weights", model[0])
 
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
     config = get_model_config(model[0])
+
+    import neck
+    neck.parse_framework_config(args)
+    for vp_rank, model_chunk in enumerate(model):
+        neck.reinit_model(model_chunk, vp_rank)
+        neck.register_model_hooks(model_chunk, vp_rank)
 
     # Data stuff.
     timers('train/valid/test-data-iterators-setup', log_level=0).start(
@@ -550,7 +571,7 @@ def setup_model_and_optimizer(model_provider_func,
 
 
 def train_step(forward_step_func, data_iterator,
-               model, optimizer, opt_param_scheduler, config):
+               model, optimizer, opt_param_scheduler, config, iteration):
     """Single training step."""
     args = get_args()
     timers = get_timers()
@@ -581,10 +602,18 @@ def train_step(forward_step_func, data_iterator,
         unwrapped_model = unwrap_model(model[0])
         unwrapped_model.cancel_gradients_last_layer(args.curr_iteration)
 
+    import neck
+    for vp_rank, model_chunk in enumerate(model):
+        neck.interface.log_main_grad(model_chunk, vp_rank)
+
+
     # Update parameters.
     timers('optimizer', log_level=1).start(barrier=args.barrier_with_L1_time)
     update_successful, grad_norm, num_zeros_in_grad = optimizer.step()
     timers('optimizer').stop()
+
+    if not update_successful:
+        remove_grad(iteration)
 
     # Vision momentum.
     if getattr(args, 'vision_pretraining', False) and args.vision_pretraining_type == "dino":
@@ -1048,7 +1077,7 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                        model,
                        optimizer,
                        opt_param_scheduler,
-                       config)
+                       config, iteration)
         iteration += 1
         batch_size = mpu.get_data_parallel_world_size() * \
                      args.micro_batch_size * \

@@ -276,6 +276,7 @@ def save_checkpoint(iteration, model, optimizer, opt_param_scheduler,
     Checkpointing context is used to persist some checkpointing state
     throughout a single job. Must be initialized externally (not used if None).
     """
+    return
     args = get_args()
 
     # Only rank zero of the data parallel writes to the disk.

@@ -12,10 +12,10 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
-CHECKPOINT_PATH=<Specify path>
-VOCAB_FILE=<Specify path to file>/gpt2-vocab.json
-MERGE_FILE=<Specify path to file>/gpt2-merges.txt
-DATA_PATH=<Specify path and file prefix>_text_document
+CHECKPOINT_PATH=/workspace/checkpoints
+VOCAB_FILE=/workspace/dataset/gpt2-vocab.json
+MERGE_FILE=/workspace/dataset/gpt2-merges.txt
+DATA_PATH=/workspace/dataset/wikitext/wikitext_text_document
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -27,25 +27,31 @@ DISTRIBUTED_ARGS="
 
 GPT_ARGS="
     --tensor-model-parallel-size 2 \
-    --pipeline-model-parallel-size 2 \
-    --sequence-parallel \
+    --pipeline-model-parallel-size 4 \
+    --num-layers-per-virtual-pipeline-stage 4 \
     --num-layers 24 \
     --hidden-size 1024 \
     --num-attention-heads 16 \
     --seq-length 1024 \
     --max-position-embeddings 1024 \
     --micro-batch-size 4 \
-    --global-batch-size 16 \
+    --global-batch-size 128 \
     --lr 0.00015 \
-    --train-iters 500000 \
+    --train-iters 1 \
     --lr-decay-iters 320000 \
     --lr-decay-style cosine \
     --min-lr 1.0e-5 \
     --weight-decay 1e-2 \
     --lr-warmup-fraction .01 \
     --clip-grad 1.0 \
-    --fp16
+    --use-mcore-models \
+    --attention-softmax-in-fp32 \
+    --attention-dropout 0.0 \
+    --hidden-dropout 0.0 \
+    --fp16 \
+    --transformer-impl local \
 "
+    #--tensorboard-dir /workspace/tensorboard/small-curr-10k-mcore-wiki-bug-noclip
 
 DATA_ARGS="
     --data-path $DATA_PATH \
@@ -58,7 +64,7 @@ OUTPUT_ARGS="
     --log-interval 100 \
     --save-interval 10000 \
     --eval-interval 1000 \
-    --eval-iters 10
+    --eval-iters 0
 "
 
 torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \

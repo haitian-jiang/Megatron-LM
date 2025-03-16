@@ -1079,6 +1079,8 @@ class RowParallelLinear(torch.nn.Module):
         elif self.sequence_parallel:
             output_ = reduce_scatter_to_sequence_parallel_region(output_parallel)
         else:
+            # 🐛🐛🐛 Forgot all-reduce
+            # output_ = output_parallel
             output_ = reduce_from_tensor_model_parallel_region(output_parallel)
         if not self.skip_bias_add:
             output = (output_ + self.bias) if self.bias is not None else output_
