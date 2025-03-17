@@ -262,12 +262,6 @@ def pretrain(train_valid_test_dataset_provider,
                    'scheduler are built')
     config = get_model_config(model[0])
 
-    import neck
-    neck.parse_framework_config(args)
-    for vp_rank, model_chunk in enumerate(model):
-        neck.reinit_model(model_chunk, vp_rank)
-        neck.register_model_hooks(model_chunk, vp_rank)
-
     # Data stuff.
     timers('train/valid/test-data-iterators-setup', log_level=0).start(
         barrier=True)
@@ -538,6 +532,12 @@ def setup_model_and_optimizer(model_provider_func,
     model = get_model(model_provider_func, model_type)
     unwrapped_model = unwrap_model(model)
 
+    import neck
+    neck.parse_framework_config(args)
+    for vp_rank, model_chunk in enumerate(model):
+        neck.reinit_model(model_chunk, vp_rank)
+        neck.register_model_hooks(model_chunk, vp_rank)
+
     kwargs = {}
     for f in dataclasses.fields(OptimizerConfig):
         if hasattr(args, f.name):
@@ -604,13 +604,17 @@ def train_step(forward_step_func, data_iterator,
 
     import neck
     for vp_rank, model_chunk in enumerate(model):
-        neck.interface.log_main_grad(model_chunk, vp_rank)
+        neck.prior_optim_logging(model_chunk, vp_rank)
 
 
     # Update parameters.
     timers('optimizer', log_level=1).start(barrier=args.barrier_with_L1_time)
     update_successful, grad_norm, num_zeros_in_grad = optimizer.step()
     timers('optimizer').stop()
+
+    # if update_successful:  # debatable
+    for vp_rank, model_chunk in enumerate(model):
+        neck.post_optim_logging_reset(model_chunk, vp_rank)
 
     if not update_successful:
         remove_grad(iteration)
